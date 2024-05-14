@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {LaunchPool} from "./LaunchPool.sol";
+import {CLMMLaunchPool} from "./CLMMPool.sol";
 
-contract LaunchPad {
+contract CLMMLaunchPad {
     address[] launchPools;
 
     function createLaunchPool(
@@ -15,7 +15,7 @@ contract LaunchPad {
         uint256 saleDuration,
         address[] memory whitelists,
         uint256[] memory amounts,
-        uint256[2] memory _ratios
+        uint256[3] memory _ratios
     ) external {
         require(saleStartTime > block.timestamp, "start time cannot be in past!");
         require(
@@ -34,7 +34,7 @@ contract LaunchPad {
             "whitelist + creator supply should be less than or equal to 50%"
         );
 
-        LaunchPool pool = new LaunchPool(
+        CLMMLaunchPool pool = new CLMMLaunchPool(
             name,
             symbol,
             maxSupply,

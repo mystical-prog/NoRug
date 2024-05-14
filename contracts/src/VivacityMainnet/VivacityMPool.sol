@@ -3,8 +3,8 @@ pragma solidity ^0.8.24;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {CErc20} from "../lib/clm/src/CErc20.sol";
-import {CToken} from "../lib/clm/src/CToken.sol";
+import {CErc20} from "../../lib/clm/src/CErc20.sol";
+import {CToken} from "../../lib/clm/src/CToken.sol";
 import {console} from "forge-std/Test.sol";
 
 interface Comptroller {
@@ -27,8 +27,8 @@ interface BaseV1Router01 {
     ) external returns (uint256 amountA, uint256 amountB, uint256 liquidity);
 }
 
-// This implementation is developed for Testnet only.
-contract LaunchPool is ERC20 {
+// This implementation is created based on Mainnet utilising Vivacity
+contract VivacityLaunchPool is ERC20 {
     uint256 public maxSupply;
     uint256 public allocatedSupply;
     uint256 public reservedSupply;
@@ -38,17 +38,21 @@ contract LaunchPool is ERC20 {
     address public creator;
     address[] public whitelist;
 
-    // this is for testnet only - [ETH, ATOM]
-    address[2] public assets = [
-        0xCa03230E7FB13456326a234443aAd111AC96410A,
-        0x40E41DC5845619E7Ba73957449b31DFbfB9678b2
+    address public constant unitroller = 0xe49627059Dd2A0fba4A81528207231C508d276CB;
+    address public constant vcNOTE = 0x74c6dBA944702007e3a18C2caad9F6F274cF38dD;
+
+    // [ETH, ATOM, WCANTO]
+    address[3] public assets = [
+        0x5FD55A1B9FC24967C4dB09C513C3BA0DFa7FF687,
+        0xecEEEfCEE421D8062EF8d6b4D814efe4dc898265,
+        0x826551890Dc65655a0Aceca109aB11AbDbD7a07B
     ];
     mapping(address => address) public cTokenMapping;
     uint256[] public amounts;
 
     // ratios denote how many tokens will a buyer get in exchange of existing token
     // for eg. ratios[0] = 10*10**18 meaning each user will get 10 tokens for each NOTE
-    uint256[2] public ratios;
+    uint256[3] public ratios;
 
     bool public airdropped;
     bool public whitelistdropped;
@@ -69,7 +73,7 @@ contract LaunchPool is ERC20 {
         address _creator,
         address[] memory _whitelist,
         uint256[] memory _amounts,
-        uint256[2] memory _ratios
+        uint256[3] memory _ratios
     ) ERC20(name, symbol) {
         maxSupply = _maxSupply;
         creatorSupply = _creatorSupply;
@@ -82,8 +86,9 @@ contract LaunchPool is ERC20 {
         amounts = _amounts;
         ratios = _ratios;
         // asset -> vcAsset
-        cTokenMapping[0xCa03230E7FB13456326a234443aAd111AC96410A] = 0x4c93f060aCe7EBdc1687F0c04f7b4601F4470E0f;
-        cTokenMapping[0x40E41DC5845619E7Ba73957449b31DFbfB9678b2] = 0x8e818074EFeeA7fea2395331050376d311f96De1;
+        cTokenMapping[0x5FD55A1B9FC24967C4dB09C513C3BA0DFa7FF687] = 0x83A7Aa3a9f5E777Fd4BF02d26Adc8Ea5DDC1C20D;
+        cTokenMapping[0xecEEEfCEE421D8062EF8d6b4D814efe4dc898265] = 0xAB8674A498d4C1Ef4a75B4e88df0BC2BC5e4F6A0;
+        cTokenMapping[0x826551890Dc65655a0Aceca109aB11AbDbD7a07B] = 0x2Cc8C9B72bF126553F6226688be8C40ce408FaC8;
         // setting all bools to false
         airdropped = false;
         whitelistdropped = false;
@@ -154,7 +159,17 @@ contract LaunchPool is ERC20 {
     }
 
     function clm_and_dex_calls() internal {
-        // Minting cTokens = Supplying to CLM
+
+        Comptroller troll = Comptroller(unitroller);
+
+        CToken[] memory inps = new CToken[](3);
+        inps[0] = CErc20(0x83A7Aa3a9f5E777Fd4BF02d26Adc8Ea5DDC1C20D);
+        inps[1] = CErc20(0xAB8674A498d4C1Ef4a75B4e88df0BC2BC5e4F6A0);
+        inps[2] = CErc20(0x2Cc8C9B72bF126553F6226688be8C40ce408FaC8);
+
+        troll.enterMarkets(inps);
+
+        // Minting vcTokens = Supplying to Vivacity
         for (uint256 i = 0; i < assets.length; i++) {
             ERC20 underlying = ERC20(assets[i]);
             uint256 token_balance = underlying.balanceOf(address(this));
@@ -164,21 +179,9 @@ contract LaunchPool is ERC20 {
                 assert(cToken.mint(token_balance) == 0);
             }
         }
-        // Checking Liquidity - Testnet address is being used
-        Comptroller troll = Comptroller(0xFf64a8Ab86b0B56c2487DB9EBF630B8863a66620);
-
-        CToken[] memory inps = new CToken[](2);
-        inps[0] = CErc20(0x260fCD909ab9dfF97B03591F83BEd5bBfc89A571);
-        inps[1] = CErc20(0x8e818074EFeeA7fea2395331050376d311f96De1);
-
-        uint[] memory returned = troll.enterMarkets(inps);
-
-        // CToken[] memory cTokens = troll.getAllMarkets();
 
         (uint256 error, uint256 liquidity, uint256 shortfall) = troll.getAccountLiquidity(address(this));
 
-        console.log("Returned-1: ", returned[0]);
-        console.log("Returned-1: ", returned[1]);
         console.log("Error: ", error);
         console.log("Liquidity: ", liquidity);
         console.log("Shortfall: ", shortfall);
@@ -186,15 +189,17 @@ contract LaunchPool is ERC20 {
         require(error == 0, "something went wrong");
         require(shortfall == 0, "negative liquidity balance");
         require(liquidity > 0, "there's not enough collateral");
-        // Borrowing NOTE - Testnet cNOTE address is being used
-        CErc20 cNOTE = CErc20(0x45D36aD3a67a29F36F06DbAB1418F2e8Fa916Eea);
+
+        // Borrowing NOTE from the vcNOTE
+        CErc20 cERCvcNOTE = CErc20(vcNOTE);
         uint256 amt_borrow = liquidity - 1;
-        require(cNOTE.borrow(amt_borrow) == 0, "there is not enough collateral");
+        require(cERCvcNOTE.borrow(amt_borrow) == 0, "there is not enough collateral");
+
         // Creating new pair on DEX - Testnet address is being used for Router as well as for NOTE
-        BaseV1Router01 testnet_dex = BaseV1Router01(0x463e7d4DF8fE5fb42D024cb57c77b76e6e74417a);
-        (uint256 amountA, uint256 amountB,) = testnet_dex.addLiquidity(
+        BaseV1Router01 mainnet_dex = BaseV1Router01(0xa252eEE9BDe830Ca4793F054B506587027825a8e);
+        (uint256 amountA, uint256 amountB,) = mainnet_dex.addLiquidity(
             address(this),
-            0x03F734Bd9847575fDbE9bEaDDf9C166F880B5E5f,
+            0x4e71A2E537B7f9D9413D3991D37958c0b5e1e503,
             false,
             reservedSupply,
             amt_borrow,
