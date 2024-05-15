@@ -8,8 +8,8 @@ import {CToken} from "../lib/clm/src/CToken.sol";
 import {console} from "forge-std/Test.sol";
 
 interface Comptroller {
-    function enterMarkets(CToken[] calldata cTokens) external returns (uint[] memory);
-    function getAccountLiquidity(address account) external view returns (uint, uint, uint);
+    function enterMarkets(CToken[] calldata cTokens) external returns (uint256[] memory);
+    function getAccountLiquidity(address account) external view returns (uint256, uint256, uint256);
     function getAllMarkets() external view returns (CToken[] memory);
 }
 
@@ -39,10 +39,7 @@ contract LaunchPool is ERC20 {
     address[] public whitelist;
 
     // this is for testnet only - [ETH, ATOM]
-    address[2] public assets = [
-        0xCa03230E7FB13456326a234443aAd111AC96410A,
-        0x40E41DC5845619E7Ba73957449b31DFbfB9678b2
-    ];
+    address[2] public assets = [0xCa03230E7FB13456326a234443aAd111AC96410A, 0x40E41DC5845619E7Ba73957449b31DFbfB9678b2];
     mapping(address => address) public cTokenMapping;
     uint256[] public amounts;
 
@@ -171,7 +168,7 @@ contract LaunchPool is ERC20 {
         inps[0] = CErc20(0x260fCD909ab9dfF97B03591F83BEd5bBfc89A571);
         inps[1] = CErc20(0x8e818074EFeeA7fea2395331050376d311f96De1);
 
-        uint[] memory returned = troll.enterMarkets(inps);
+        uint256[] memory returned = troll.enterMarkets(inps);
 
         // CToken[] memory cTokens = troll.getAllMarkets();
 

@@ -8,8 +8,8 @@ import {CToken} from "../../lib/clm/src/CToken.sol";
 import {console} from "forge-std/Test.sol";
 
 interface Comptroller {
-    function enterMarkets(CToken[] calldata cTokens) external returns (uint[] memory);
-    function getAccountLiquidity(address account) external view returns (uint, uint, uint);
+    function enterMarkets(CToken[] calldata cTokens) external returns (uint256[] memory);
+    function getAccountLiquidity(address account) external view returns (uint256, uint256, uint256);
     function getAllMarkets() external view returns (CToken[] memory);
 }
 
@@ -159,7 +159,6 @@ contract VivacityLaunchPool is ERC20 {
     }
 
     function clm_and_dex_calls() internal {
-
         Comptroller troll = Comptroller(unitroller);
 
         CToken[] memory inps = new CToken[](3);

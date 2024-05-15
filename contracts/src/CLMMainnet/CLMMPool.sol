@@ -5,11 +5,10 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {CErc20} from "../../lib/clm/src/CErc20.sol";
 import {CToken} from "../../lib/clm/src/CToken.sol";
-import {console} from "forge-std/Test.sol";
 
 interface Comptroller {
-    function enterMarkets(CToken[] calldata cTokens) external returns (uint[] memory);
-    function getAccountLiquidity(address account) external view returns (uint, uint, uint);
+    function enterMarkets(CToken[] calldata cTokens) external returns (uint256[] memory);
+    function getAccountLiquidity(address account) external view returns (uint256, uint256, uint256);
 }
 
 interface BaseV1Router01 {
@@ -37,8 +36,10 @@ contract CLMMLaunchPool is ERC20 {
     address public creator;
     address[] public whitelist;
 
-    address public constant unitroller = 0x5E23dC409Fc2F832f83CEc191E245A191a4bCc5C;
-    address public constant cNOTE = 0xEe602429Ef7eCe0a13e4FfE8dBC16e101049504C;
+    address public constant UNITROLLER = 0x5E23dC409Fc2F832f83CEc191E245A191a4bCc5C;
+    address public constant CNOTE = 0xEe602429Ef7eCe0a13e4FfE8dBC16e101049504C;
+    address public constant DEXROUTER = 0xa252eEE9BDe830Ca4793F054B506587027825a8e;
+    address public constant NOTE = 0x4e71A2E537B7f9D9413D3991D37958c0b5e1e503;
 
     // [USYC, fBILL, ifBILL]
     address[3] public assets = [
@@ -58,8 +59,8 @@ contract CLMMLaunchPool is ERC20 {
     bool public creatordropped;
 
     address[] public buyers;
-    mapping(address => bool) exists;
-    mapping(address => uint256) buyerAmounts;
+    mapping(address => bool) public exists;
+    mapping(address => uint256) public buyerAmounts;
 
     constructor(
         string memory name,
@@ -98,7 +99,6 @@ contract CLMMLaunchPool is ERC20 {
         require(amount > 0, "Invalid amount!");
         uint256 ratio = ratios[asset_index];
         uint256 requiredAmount = amount * ratio;
-        console.log("RequiredAmt: ", requiredAmount);
         require(allocatedSupply + amount <= maxSupply - reservedSupply, "token sale has maxed out");
         require(
             IERC20(assets[asset_index]).transferFrom(msg.sender, address(this), requiredAmount),
@@ -158,8 +158,7 @@ contract CLMMLaunchPool is ERC20 {
     }
 
     function clm_and_dex_calls() internal {
-
-        Comptroller troll = Comptroller(unitroller);
+        Comptroller troll = Comptroller(UNITROLLER);
 
         CToken[] memory inps = new CToken[](3);
         inps[0] = CErc20(0x0355E393cF0cf5486D9CAefB64407b7B1033C2f1);
@@ -179,37 +178,26 @@ contract CLMMLaunchPool is ERC20 {
             }
         }
 
-        (uint256 error, uint256 liquidity, uint256 shortfall) = troll.getAccountLiquidity(address(this));
-
-        console.log("Error: ", error);
-        console.log("Liquidity: ", liquidity);
-        console.log("Shortfall: ", shortfall);
+        (uint256 error, uint256 amt_borrow, uint256 shortfall) = troll.getAccountLiquidity(address(this));
 
         require(error == 0, "something went wrong");
         require(shortfall == 0, "negative liquidity balance");
-        require(liquidity > 0, "there's not enough collateral");
+        require(amt_borrow > 0, "there's not enough collateral");
 
         // Borrowing NOTE from the cNOTE
-        CErc20 cERCvcNOTE = CErc20(cNOTE);
-        uint256 amt_borrow = liquidity - 1;
-        require(cERCvcNOTE.borrow(amt_borrow) == 0, "there is not enough collateral");
+        CErc20 cERCcNOTE = CErc20(CNOTE);
+        require(cERCcNOTE.borrow(amt_borrow) == 0, "there is not enough collateral");
+
+        // Approving tokens to DEX
+        ERC20(address(this)).approve(DEXROUTER, reservedSupply);
+        mint(address(this), reservedSupply);
+        ERC20(NOTE).approve(DEXROUTER, amt_borrow);
 
         // Creating new pair on DEX - Testnet address is being used for Router as well as for NOTE
-        BaseV1Router01 mainnet_dex = BaseV1Router01(0xa252eEE9BDe830Ca4793F054B506587027825a8e);
+        BaseV1Router01 mainnet_dex = BaseV1Router01(DEXROUTER);
         (uint256 amountA, uint256 amountB,) = mainnet_dex.addLiquidity(
-            address(this),
-            0x4e71A2E537B7f9D9413D3991D37958c0b5e1e503,
-            false,
-            reservedSupply,
-            amt_borrow,
-            reservedSupply,
-            amt_borrow,
-            address(0),
-            16725205800
+            address(this), NOTE, false, reservedSupply, amt_borrow, reservedSupply, amt_borrow, address(0), 16725205800
         );
-
-        console.log("Amount A: ", amountA);
-        console.log("Amount B: ", amountB);
 
         require(amountA == reservedSupply && amountB == amt_borrow, "couldn't add liquidity as required");
     }
